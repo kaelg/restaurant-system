@@ -1,3 +1,5 @@
+from typing import Required, Optional
+
 import uvicorn
 from enum import Enum
 from fastapi import FastAPI, Depends, HTTPException
@@ -26,8 +28,7 @@ app.add_middleware(
 # Database setup
 Base = declarative_base()
 
-# Enums
-# TODO: Dodaj swoje enumy tutaj
+
 class StaffType(str,Enum):
     CHEF = "kucharz"
     WAITER = "kelner"
@@ -42,15 +43,11 @@ class TaskPriority(str, Enum):
     LOW = "niski"
     MID = "sredni"
     HIGH = "wysoki"
-# class YourEnum(str, Enum):
-#     VALUE1 = "value1"
-#     VALUE2 = "value2"
 
-# Database models
-# TODO: Dodaj swoje modele tutaj
+
+
 class Task(Base):
     __tablename__ = "restaurant_tasks"
-
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     description = Column(String)
@@ -58,17 +55,36 @@ class Task(Base):
     assigned_to = Column(String)
     status = Column(String, default=TaskStatus.NEW.value)
     priority = Column(String, default=TaskPriority.MID.value)
-    created_at = Column(DateTime, default=lambda: datetime.now)
+    created_at = Column(DateTime, default=datetime.now)
 
-# class YourModel(Base):
-#     __tablename__ = "your_table"
-#
-#     id = Column(Integer, primary_key=True, index=True)
-#     # Dodaj swoje kolumny tutaj
 
-# Pydantic models
-# TODO: Dodaj swoje Pydantic modele tutaj
-# class YourSchema(BaseModel):
+class TaskCreate(BaseModel):
+    title: str
+    description: Optional[str]
+    staff_type: StaffType
+    assigned_to: Optional[str]
+
+class TaskUpdate(BaseModel):
+    description: Optional[str]
+    assigned_to: Optional[str]
+    priority: Optional[TaskPriority]
+    status: Optional[TaskStatus]
+
+class TaskResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    staff_type: StaffType
+    assigned_to: Optional[str]
+    priority: TaskPriority
+    status: TaskStatus
+    created_at: datetime
+
+    class Config:
+        from_attributes = True # TODO: response = TaskResponse.model_validate(Task.first)
+
+
+    # class YourSchema(BaseModel):
 #     field1: str
 #     field2: int
 
