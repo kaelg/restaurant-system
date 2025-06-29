@@ -243,6 +243,7 @@ def get_today_reservations(db: Session = Depends(get_db)):
     return reservations
 
 
+
 @app.get("/tables/availability/{date}")
 def check_table_availability(date: str, db: Session = Depends(get_db)):
     reservations = db.query(Reservation).filter(
