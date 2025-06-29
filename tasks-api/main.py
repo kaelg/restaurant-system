@@ -1,6 +1,5 @@
-from typing import Required, Optional
-
 import uvicorn
+from typing import Optional
 from enum import Enum
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,7 +47,7 @@ class TaskPriority(str, Enum):
 
 class Task(Base):
     __tablename__ = "restaurant_tasks"
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     title = Column(String, nullable=False)
     description = Column(String)
     staff_type = Column(String, nullable=False)
@@ -56,6 +55,9 @@ class Task(Base):
     status = Column(String, default=TaskStatus.NEW.value)
     priority = Column(String, default=TaskPriority.MID.value)
     created_at = Column(DateTime, default=datetime.now)
+    order_id = Column(Integer,primary_key=True, index=True)
+    order_type = Column(String, nullable=False)
+    parent_task_id = Column(Integer, nullable=True)
 
 
 class TaskCreate(BaseModel):
@@ -63,6 +65,9 @@ class TaskCreate(BaseModel):
     description: Optional[str]
     staff_type: StaffType
     assigned_to: Optional[str]
+    order_id: int
+    order_type: str
+    parent_task_id: Optional[int] = None
 
 class TaskUpdate(BaseModel):
     description: Optional[str]
@@ -79,6 +84,9 @@ class TaskResponse(BaseModel):
     priority: TaskPriority
     status: TaskStatus
     created_at: datetime
+    order_id: int
+    order_type: str
+    parent_task_id: Optional[int]
 
     class Config:
         from_attributes = True # TODO: response = TaskResponse.model_validate(Task.first)
@@ -115,11 +123,34 @@ def not_found_exception(db_item):
 def root():
     return {"message": "Your new API is running!"}
 
-# TODO: Dodaj swoje endpointy tutaj
-# @app.get("/your-endpoint")
-# def your_function(db: Session = Depends(get_db)):
-#     # Your logic here
-#     pass
+# TODO: Dodaj endpointy
+@app.get("/tasks")
+def get_all_tasks(db: Session = Depends(get_db)):
+    tasks = db.query(Task).all()
+    return tasks
+
+@app.post("/tasks")  # wywolywany przez Orders API
+def create_task(task: TaskCreate, db: Session = Depends(get_db)):
+    new_task = Task(
+        title=task.title,
+        description=task.description,
+        staff_type=task.staff_type.value,  # ← Enum → String
+        assigned_to=task.assigned_to,
+        order_id=task.order_id,
+        order_type=task.order_type,
+        parent_task_id=task.parent_task_id
+        # status i priority maja defaulty
+    )
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
+    return new_task
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    not_found_exception(task)
+    return task
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
