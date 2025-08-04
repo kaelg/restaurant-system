@@ -1,20 +1,11 @@
-from typing import Optional
 import requests
 import uvicorn
-from enum import Enum
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
-
-class OrderStatus(str, Enum):
-    NEW = "nowe"
-    IN_PREPARATION = "w przygotowaniu"
-    READY = "gotowe"
-    DELIVERED = "dostarczone"
-    CANCELLED = "anulowane"
+from sqlalchemy.orm import Session
+from config.db.connection import get_db
+from models.orders import RestaurantOrder
+from schemas.orders import CustomerOrder, RestaurantOrderUpdate, StatusUpdate
 
 app = FastAPI()
 origins = [
@@ -28,65 +19,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=['*'],
 )
-
-Base = declarative_base()
-
-class OrderType(str, Enum):
-    DINE_IN = "na_sale"
-    DELIVERY = "na_dowoz"
-
-
-class RestaurantOrder(Base):
-    __tablename__ = "restaurant_orders"
-
-    id = Column(Integer, primary_key=True, index=True)
-    customer_name = Column(String, nullable=False)
-    customer_phone = Column(String, nullable=False)
-    status = Column(String, nullable=False)
-    items = Column(String, nullable=False)
-    total_price = Column(Float, nullable=False)
-    ready = Column(Boolean, default=False)
-    delivered = Column(Boolean, default=False)
-    order_type = Column(String, nullable=False)
-    table_number = Column(Integer, nullable=True)
-    delivery_address = Column(String, nullable=True)
-
-class CustomerOrder(BaseModel):
-    customer_name: str
-    customer_phone: str
-    items: str
-    total_price: float
-    order_type: OrderType
-    table_number: Optional[int] = None
-    delivery_address: Optional[str] = None
-
-class RestaurantOrderUpdate(BaseModel):
-    customer_name: str
-    customer_phone: str
-    status: str
-    items: str
-    total_price: float
-    ready: bool
-    delivered: bool
-
-class StatusUpdate(BaseModel):
-    new_status: OrderStatus
-
-DATABASE_URL = "postgresql://postgres:postgres@localhost/api"
-engine = create_engine(DATABASE_URL)
-
-Base.metadata.create_all(bind=engine)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 
 @app.get("/restaurant_orders/single_order/{order_id}")
 def get_single_order(order_id: int, db: Session = Depends(get_db)):

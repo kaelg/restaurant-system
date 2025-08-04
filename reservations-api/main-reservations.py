@@ -1,13 +1,12 @@
 import uvicorn
-from typing import Optional, List
-from enum import Enum
+from typing import List
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session
 from datetime import datetime
+from config.db.connection import get_db
+from models.reservations import Reservation, ReservationStatus
+from schemas.reservations import ReservationCreate, ReservationResponse, ReservationUpdate
 
 app = FastAPI()
 
@@ -22,84 +21,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=['*'],
 )
-
-# Database setup
-Base = declarative_base()
-
-
-# Enums
-class ReservationStatus(str, Enum):
-    PENDING = "oczekujaca"
-    CONFIRMED = "potwierdzona"
-    CANCELLED = "anulowana"
-    COMPLETED = "zakonczona"
-
-
-# Database models
-class Reservation(Base):
-    __tablename__ = "reservations"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    customer_name = Column(String, nullable=False)
-    customer_phone = Column(String, nullable=False)
-    table_number = Column(Integer, nullable=False)
-    reservation_date = Column(String, nullable=False)  # "2025-06-18"
-    reservation_time = Column(String, nullable=False)  # "19:30"
-    guests_count = Column(Integer, default=2)
-    status = Column(String, default=ReservationStatus.PENDING.value)
-    created_at = Column(DateTime, default=datetime.now)
-
-
-# Pydantic models
-class ReservationCreate(BaseModel):
-    customer_name: str
-    customer_phone: str
-    table_number: int
-    reservation_date: str  # "2025-06-18"
-    reservation_time: str  # "19:30"
-    guests_count: Optional[int] = 2
-
-
-class ReservationUpdate(BaseModel):
-    customer_name: Optional[str] = None
-    customer_phone: Optional[str] = None
-    table_number: Optional[int] = None
-    reservation_date: Optional[str] = None
-    reservation_time: Optional[str] = None
-    guests_count: Optional[int] = None
-    status: Optional[ReservationStatus] = None
-
-
-class ReservationResponse(BaseModel):
-    id: int
-    customer_name: str
-    customer_phone: str
-    table_number: int
-    reservation_date: str
-    reservation_time: str
-    guests_count: int
-    status: ReservationStatus
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-DATABASE_URL = "postgresql://postgres:postgres@localhost/api"
-engine = create_engine(DATABASE_URL)
-
-Base.metadata.create_all(bind=engine)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 
 def not_found_exception(db_item):
     """Helper function to raise 404 if item not found"""
