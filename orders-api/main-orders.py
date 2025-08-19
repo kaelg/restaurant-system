@@ -1,18 +1,11 @@
+import requests
 import uvicorn
-from enum import Enum
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
-
-class OrderStatus(str, Enum):
-    NEW = "nowe"
-    IN_PREPARATION = "w przygotowaniu"
-    READY = "gotowe"
-    DELIVERED = "dostarczone"
-    CANCELLED = "anulowane"
+from sqlalchemy.orm import Session
+from config.db.connection import get_db
+from models.orders import RestaurantOrder
+from schemas.orders import CustomerOrder, RestaurantOrderUpdate, StatusUpdate
 
 app = FastAPI()
 origins = [
@@ -26,57 +19,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=['*'],
 )
-
-Base = declarative_base()
-
-
-class RestaurantOrder(Base):
-    __tablename__ = "restaurant_orders"
-
-    id = Column(Integer, primary_key=True, index=True)
-    customer_name = Column(String, nullable=False)
-    customer_phone = Column(String, nullable=False)
-    status = Column(String, nullable=False)
-    items = Column(String, nullable=False)
-    total_price = Column(Float, nullable=False)
-    ready = Column(Boolean, default=False)
-    delivered = Column(Boolean, default=False)
-
-
-class CustomerOrder(BaseModel):
-    customer_name: str
-    customer_phone: str
-    items: str
-    total_price: float
-
-
-class RestaurantOrderUpdate(BaseModel):
-    customer_name: str
-    customer_phone: str
-    status: str
-    items: str
-    total_price: float
-    ready: bool
-    delivered: bool
-
-class StatusUpdate(BaseModel):
-    new_status: OrderStatus
-
-DATABASE_URL = "postgresql://postgres:postgres@localhost/api"
-engine = create_engine(DATABASE_URL)
-
-Base.metadata.create_all(bind=engine)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 
 @app.get("/restaurant_orders/single_order/{order_id}")
 def get_single_order(order_id: int, db: Session = Depends(get_db)):
@@ -118,7 +60,10 @@ def place_order(customer_order: CustomerOrder, db: Session = Depends(get_db)):
         items = customer_order.items,
         total_price = customer_order.total_price,
         ready = False,
-        delivered = False
+        delivered = False,
+        order_type = customer_order.order_type.value,
+        table_number = customer_order.table_number,
+        delivery_address = customer_order.delivery_address
     )
     db.add(db_order)
 
@@ -126,6 +71,45 @@ def place_order(customer_order: CustomerOrder, db: Session = Depends(get_db)):
     db.refresh(db_order)
     return {"id": db_order.id,
             "status": "Order placed!"}
+
+
+@app.post("/restaurant_orders/{order_id}/create_tasks")
+def create_tasks_from_order(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(RestaurantOrder).filter(RestaurantOrder.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.status != "nowe":
+        raise HTTPException(status_code=400, detail="Tasks already created")
+
+    task_data = {
+        "title": f"Przygotuj zamówienie #{order_id}",
+        "description": f"Items: {order.items}",
+        "staff_type": "kucharz",
+        "assigned_to": None,
+        "order_id": order_id,
+        "order_type": order.order_type,
+        "parent_task_id": None
+    }
+
+    try:
+        response = requests.post("http://localhost:8001/tasks", json=task_data)
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Failed to create task")
+    except requests.exceptions.RequestException:
+        raise HTTPException(status_code=500, detail="Cannot connect to Tasks API")
+    
+    order.status = "w_przygotowaniu"
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "message": "Tasks created successfully",
+        "order_id": order_id,
+        "task_created": response.json()
+    }
+
+
 
 
 @app.put("/restaurant_orders/{order_id}")
