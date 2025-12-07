@@ -41,48 +41,22 @@ def get_all_menu_items(db: Session = Depends(get_db)):
 
 @app.get("/menu/{item_id}", response_model = MenuItemResponse)
 def get_menu_item(item_id: int, db: Session = Depends(get_db)):
-    menu_item = menu_service.get_item_by_id(db,item_id)
-    if menu_item is None:
-        raise HTTPException(status_code=404, detail="Menu item not found")
+    menu_item = menu_service.get_item_by_id(db, item_id)
     return menu_item
 
 @app.post("/menu", response_model=MenuItemResponse)
 def create_menu_item(menu_item: MenuItemCreate, db: Session = Depends(get_db)):
-    item = menu_service.create_item(db,menu_item)
+    item = menu_service.create_item(db, menu_item)
     return MenuItemResponse.model_validate(item)#to samo co return new_menu_item ale jasno mowi ze api ma to przemapowac
 
 @app.put("/menu/{item_id}", response_model=MenuItemResponse)
-def update_menu_item(item_id: int, menu_update: MenuItemUpdate, db: Session = Depends(get_db)):
-    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
-    if db_item is None:
-        raise HTTPException(status_code=404,
-                            detail="Menu item not found")
-    if menu_update.name is not None:
-        db_item.name = menu_update.name
-    if menu_update.category is not None:
-        db_item.category = menu_update.category.value
-    if menu_update.price is not None:
-        db_item.price = menu_update.price
-    if menu_update.prep_time_minutes is not None:
-        db_item.prep_time_minutes = menu_update.prep_time_minutes
-    if menu_update.available is not None:
-        db_item.available = menu_update.available
-    if menu_update.description is not None:
-        db_item.description = menu_update.description
-
-    db.commit()
-    db.refresh(db_item)
-    return db_item
+def update_menu_item(item_id: int, menu_item_update: MenuItemUpdate, db: Session = Depends(get_db)):
+    menu_item_response = menu_service.update_item(db, item_id, menu_item_update)
+    return MenuItemResponse.model_validate(menu_item_response)
 
 @app.delete("/menu/{item_id}")
 def delete_menu_item(item_id: int, db: Session = Depends(get_db)):
-    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
-    if db_item is None:
-        raise HTTPException(status_code=404,
-                            detail="Menu item not found")
-    db.delete(db_item)
-    db.commit()
-    return {"id": db_item.id, "Order": "deleted"}
+    return menu_service.delete_item(db, item_id)
 
 
 if __name__ == "__main__":
